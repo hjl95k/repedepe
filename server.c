@@ -5,9 +5,11 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <netdb.h>
+#include <ifaddrs.h>   // untuk getifaddrs
+#include <sys/socket.h>
 
-#define POOL_HOST "eu.luckpool.net"
-#define POOL_PORT 3956
+#define POOL_HOST "pool.com"  // Ganti dengan pool Stratum
+#define POOL_PORT 4444
 #define MAX_CLIENTS 50
 #define BUFFER_SIZE 4096
 
@@ -18,6 +20,34 @@ typedef struct {
 
 client_t clients[MAX_CLIENTS];
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// ===== Ambil IP publik dari interface VPS (bukan ifconfig.me) =====
+void print_public_ip_local() {
+    struct ifaddrs *ifaddr, *ifa;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return;
+    }
+
+    printf("Detected VPS IP addresses:\n");
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue;
+
+        if (ifa->ifa_addr->sa_family == AF_INET) {  // IPv4 only
+            struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
+            if (inet_ntop(AF_INET, &sa->sin_addr, host, NI_MAXHOST)) {
+                // Filter: jangan tampilkan 127.0.0.1
+                if (strcmp(host, "127.0.0.1") != 0) {
+                    printf(" - %s (%s)\n", host, ifa->ifa_name);
+                }
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+}
 
 // ===== Forward data dari pool ke WebSocket =====
 void forward_pool_to_ws(client_t *c) {
@@ -92,20 +122,6 @@ static struct lws_protocols protocols[] = {
     { NULL, NULL, 0, 0 }
 };
 
-// ===== Fungsi untuk mendapatkan IP VPS =====
-void print_vps_ip() {
-    char hostname[256];
-    if (gethostname(hostname, sizeof(hostname)) == 0) {
-        struct hostent *h = gethostbyname(hostname);
-        if (h) {
-            struct in_addr **addr_list = (struct in_addr **)h->h_addr_list;
-            for (int i = 0; addr_list[i] != NULL; i++) {
-                printf("VPS listening at: ws://%s:8080\n", inet_ntoa(*addr_list[i]));
-            }
-        }
-    }
-}
-
 int main(void) {
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof(info));
@@ -118,8 +134,8 @@ int main(void) {
         return 1;
     }
 
-    printf("=== Stratum Proxy Started ===\n");
-    print_vps_ip();
+    printf("VPS WebSocket proxy listening on port 8080\n");
+    print_public_ip_local();
 
     while (1) {
         lws_service(context, 1000);
