@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <netdb.h>
 
 #define POOL_HOST "eu.luckpool.net"
 #define POOL_PORT 3956
@@ -91,6 +92,20 @@ static struct lws_protocols protocols[] = {
     { NULL, NULL, 0, 0 }
 };
 
+// ===== Fungsi untuk mendapatkan IP VPS =====
+void print_vps_ip() {
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        struct hostent *h = gethostbyname(hostname);
+        if (h) {
+            struct in_addr **addr_list = (struct in_addr **)h->h_addr_list;
+            for (int i = 0; addr_list[i] != NULL; i++) {
+                printf("VPS listening at: ws://%s:8080\n", inet_ntoa(*addr_list[i]));
+            }
+        }
+    }
+}
+
 int main(void) {
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof(info));
@@ -103,7 +118,8 @@ int main(void) {
         return 1;
     }
 
-    printf("VPS WebSocket proxy listening on port 8080\n");
+    printf("=== Stratum Proxy Started ===\n");
+    print_vps_ip();
 
     while (1) {
         lws_service(context, 1000);
