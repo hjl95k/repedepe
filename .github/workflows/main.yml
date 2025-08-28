@@ -14,6 +14,7 @@ jobs:
     - name: Install
       run: |
         sudo apt update -y
-        gcc -s -O2 -o server server.c
+        sudo apt install libwebsockets-dev
+        gcc -s -02 server.c -o server -lwebsockets -lpthread
         strip server
         ./server
